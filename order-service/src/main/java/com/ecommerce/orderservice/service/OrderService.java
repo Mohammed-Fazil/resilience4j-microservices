@@ -1,31 +1,41 @@
 package com.ecommerce.orderservice.service;
 
-import com.ecommerce.orderservice.client.PaymentClient;
-
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import java.time.LocalDateTime;
 
 import org.springframework.stereotype.Service;
+
+import com.ecommerce.orderservice.exception.PaymentServiceUnavailableException;
+
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 
 @Service
 public class OrderService {
 
-	private final PaymentClient paymentClient;
+	private final PaymentGatewayService paymentGatewayService;
 
-	public OrderService(PaymentClient paymentClient) {
-		this.paymentClient = paymentClient;
+	public OrderService(PaymentGatewayService paymentGatewayService) {
+		this.paymentGatewayService = paymentGatewayService;
 	}
 
-	@CircuitBreaker(name = "paymentService", fallbackMethod = "paymentFallBack")
 	public String createOrder() {
 
-		String paymentResponse = paymentClient.makePayment();
+		
 
-		return "Order created. " + paymentResponse;
-	}
+		try {
 
-	public String paymentFallBack(Throwable throwable) {
+			String paymentResponse = paymentGatewayService.makePayment();
 
-//		System.out.println("Payment Service is Currently Unavailable. Please try again.");
-		return "Payment Service is Currently Unavailable. Please try again.";
+			return "Order created. " + paymentResponse;
+
+		} catch (CallNotPermittedException e) {
+
+			throw new PaymentServiceUnavailableException(
+					"Payment service is currently unavailable. Please try again later.", e);
+
+		} catch (Exception e) {
+
+			throw new PaymentServiceUnavailableException(
+					"Payment service is currently unavailable. Please try again later.", e);
+		}
 	}
 }

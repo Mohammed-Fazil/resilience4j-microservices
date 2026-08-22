@@ -1,26 +1,37 @@
 package com.ecommerce.paymentservice.controller;
 
+import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ecommerce.paymentservice.exception.PaymentFailedException;
+
 @RestController
-@RequestMapping("/payments")
 public class PaymentController {
-	int c = 0;
 
-	@PostMapping
-	public String makePayment() {
+	private final AtomicInteger attempts = new AtomicInteger();
 
-		System.out.println("Called Payment Service");
+	@PostMapping("/payments")
+	public ResponseEntity<String> makePayment() {
 
-//		throw new RuntimeException("Payment service is currently failing");
-		return "Payment Succesfull";
+		int attempt = attempts.incrementAndGet();
+
+		System.out.println("Payment attempt: " + attempt + " " + LocalDateTime.now());
+
+		if (attempt % 2 == 0) {
+			throw new PaymentFailedException("Temporary payment failure");
+		}
+
+		return ResponseEntity.ok("Payment Successful");
 	}
 
-	@GetMapping
+	@GetMapping()
 	public String getMethodName() {
-		return "Hello";
+		return "Hello From Payment Service";
 	}
+
 }

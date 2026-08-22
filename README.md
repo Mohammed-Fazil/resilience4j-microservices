@@ -4,31 +4,25 @@ A Spring Boot microservices project built to understand and implement resilience
 
 The project demonstrates how microservices communicate using Eureka Service Discovery and OpenFeign, and how Resilience4j protects service-to-service communication from failures.
 
----
-
 ## 🚀 Project Overview
 
-The initial architecture consists of:
+The project currently consists of:
 
 - Eureka Server
 - Order Service
 - Payment Service
 - OpenFeign for service-to-service communication
-- Spring Boot Actuator for monitoring
-- Resilience4j for fault tolerance
+- Eureka Service Discovery
+- Spring Cloud LoadBalancer
+- Spring Boot Actuator
+- Resilience4j Retry
+- Resilience4j Circuit Breaker
+- Exponential Backoff
+- Randomized Wait / Jitter
+- Global Exception Handling
+- Custom application exceptions
 
-The project will gradually introduce multiple resilience patterns:
-
-- Circuit Breaker
-- Retry
-- Rate Limiter
-- Bulkhead
-- Time Limiter
-- Fallback mechanisms
-
-The goal is not only to implement these patterns, but also to understand when and why each pattern should be used.
-
----
+The project is being developed incrementally to understand each resilience pattern and the problems it solves.
 
 ## 🏗️ Architecture
 
@@ -38,7 +32,7 @@ The goal is not only to implement these patterns, but also to understand when an
                          │      :8761       │
                          └─────────┬────────┘
                                    │
-                          Service Discovery
+                            Service Discovery
                                    │
                     ┌──────────────┴──────────────┐
                     │                             │
@@ -50,82 +44,49 @@ The goal is not only to implement these patterns, but also to understand when an
                     │
                     │ OpenFeign
                     ▼
-           ┌─────────────────┐
-           │   Resilience4j  │
-           │                 │
-           │ Circuit Breaker │
-           │ Retry           │
-           │ Bulkhead        │
-           │ RateLimiter     │
-           └────────┬────────┘
-                    │
-                    ▼
-           ┌─────────────────┐
-           │ Payment Service │
-           └─────────────────┘
+           ┌─────────────────────────┐
+           │      Resilience4j       │
+           │                         │
+           │ Retry                   │
+           │ Exponential Backoff     │
+           │ Jitter                  │
+           │ Circuit Breaker         │
+           └────────────┬────────────┘
+                        │
+                        ▼
+                 Payment Service
 ```
 
----
-
-## 🔄 Service Communication
-
-Order Service communicates with Payment Service using OpenFeign.
-
-```java
-@FeignClient(name = "payment-service")
-public interface PaymentClient {
-
-    @PostMapping("/payments")
-    String makePayment();
-}
-```
-
-The `name` refers to the service registered with Eureka.
-
-The communication flow is:
+### Service communication
 
 ```text
 Order Service
       |
-      | Feign
-      ▼
-Load Balancer
+      | OpenFeign
+      v
+Spring Cloud LoadBalancer
       |
-      ▼
-Eureka
+      v
+Eureka Service Discovery
       |
-      ▼
+      v
 Payment Service
 ```
 
-The Order Service does not directly hard-code the Payment Service host.
+## 📦 Services
 
----
-
-## 🧰 Technologies
-
-| Technology | Purpose |
-|---|---|
-| Java 21 | Programming language |
-| Spring Boot 4.1.1 | Application framework |
-| Spring Cloud 2025.1.2 | Microservices infrastructure |
-| Eureka | Service discovery |
-| OpenFeign | Service-to-service HTTP communication |
-| Resilience4j 2.4.0 | Fault tolerance |
-| Spring Boot Actuator | Monitoring and metrics |
-| Maven | Build and dependency management |
-| Git | Version control |
-
----
-
-# 📦 Services
-
-## Eureka Server
+### Eureka Server
 
 Port:
 
 ```text
 8761
+```
+
+Dashboard:
+
+```text
+http://localhost:8761
 ```
 
 Responsibilities:
@@ -134,15 +95,7 @@ Responsibilities:
 - Service discovery
 - Maintaining service instances
 
-Dashboard:
-
-```text
-http://localhost:8761
-```
-
----
-
-## Payment Service
+### Payment Service
 
 Port:
 
@@ -156,15 +109,46 @@ Endpoint:
 POST /payments
 ```
 
-Example response:
+The Payment Service contains controlled failure simulation for learning Retry and Circuit Breaker behavior.
 
-```text
-Payment Successful
+Example:
+
+```java
+@PostMapping("/payments")
+public ResponseEntity<String> makePayment() {
+
+    int attempt = attempts.incrementAndGet();
+
+    System.out.println(
+            "Payment attempt: "
+            + attempt
+            + " "
+            + LocalDateTime.now()
+    );
+
+    if (attempt % 2 == 0) {
+        throw new PaymentFailedException(
+                "Temporary payment failure"
+        );
+    }
+
+    return ResponseEntity.ok("Payment Successful");
+}
 ```
 
----
+This allows controlled failures:
 
-## Order Service
+```text
+Attempt 1 → SUCCESS
+Attempt 2 → FAILURE
+Attempt 3 → SUCCESS
+Attempt 4 → FAILURE
+...
+```
+
+The Payment Service uses a custom exception and `@RestControllerAdvice` to return structured error responses.
+
+### Order Service
 
 Port:
 
@@ -180,36 +164,172 @@ POST /orders
 
 The Order Service calls Payment Service through OpenFeign.
 
----
+The payment communication is protected by Resilience4j.
+
+## 🔄 OpenFeign Communication
+
+```java
+@FeignClient(name = "payment-service")
+public interface PaymentClient {
+
+    @PostMapping("/payments")
+    String makePayment();
+}
+```
+
+The service name `payment-service` is resolved through Eureka.
+
+```text
+Order Service
+      |
+      | Feign
+      v
+Load Balancer
+      |
+      v
+Eureka
+      |
+      v
+Payment Service
+```
+
+The Order Service does not hard-code the Payment Service host.
 
 # 🛡️ Resilience4j
 
-## Circuit Breaker
+## Retry
 
-The Order Service protects the Payment Service call using:
+Retry allows a failed operation to be attempted again.
 
-```java
-@CircuitBreaker(
-    name = "paymentService",
-    fallbackMethod = "paymentFallBack"
-)
+Current configuration:
+
+```properties
+resilience4j.retry.instances.paymentService.max-attempts=3
+resilience4j.retry.instances.paymentService.wait-duration=2s
 ```
 
-The Circuit Breaker has three main states:
+`max-attempts=3` means:
+
+```text
+Initial attempt
+      +
+Retry 1
+      +
+Retry 2
+      =
+3 total attempts
+```
+
+## Randomized Wait / Jitter
+
+Jitter prevents multiple clients from retrying at exactly the same time.
+
+```properties
+resilience4j.retry.instances.paymentService.enable-randomized-wait=true
+resilience4j.retry.instances.paymentService.randomized-wait-factor=0.5
+```
+
+Without jitter:
+
+```text
+Attempt 1
+   ↓
+2 seconds
+   ↓
+Attempt 2
+   ↓
+2 seconds
+   ↓
+Attempt 3
+```
+
+With jitter:
+
+```text
+Attempt 1
+   ↓
+randomized delay
+   ↓
+Attempt 2
+   ↓
+randomized delay
+   ↓
+Attempt 3
+```
+
+Observed during testing:
+
+```text
+Attempt 1 → Attempt 2 ≈ 2.12 seconds
+Attempt 2 → Attempt 3 ≈ 2.37 seconds
+```
+
+The exact delay is randomized.
+
+## Exponential Backoff
+
+Exponential backoff increases the retry delay after each failure.
+
+```properties
+resilience4j.retry.instances.paymentService.enable-exponential-backoff=true
+resilience4j.retry.instances.paymentService.exponential-backoff-multiplier=2
+```
+
+Conceptually:
+
+```text
+Attempt 1
+   ↓
+~2 seconds
+   ↓
+Attempt 2
+   ↓
+~4 seconds
+   ↓
+Attempt 3
+```
+
+When combined with jitter, the actual delays are randomized.
+
+Observed during testing:
+
+```text
+Attempt 1 → Attempt 2 ≈ 3.03 seconds
+Attempt 2 → Attempt 3 ≈ 4.81 seconds
+```
+
+This demonstrates Exponential Backoff + Jitter.
+
+## 🔌 Circuit Breaker
+
+Current configuration:
+
+```properties
+resilience4j.circuitbreaker.instances.paymentService.register-health-indicator=true
+resilience4j.circuitbreaker.instances.paymentService.sliding-window-type=COUNT_BASED
+resilience4j.circuitbreaker.instances.paymentService.sliding-window-size=5
+resilience4j.circuitbreaker.instances.paymentService.failure-rate-threshold=50
+resilience4j.circuitbreaker.instances.paymentService.minimum-number-of-calls=5
+resilience4j.circuitbreaker.instances.paymentService.wait-duration-in-open-state=10s
+resilience4j.circuitbreaker.instances.paymentService.permitted-number-of-calls-in-half-open-state=2
+resilience4j.circuitbreaker.instances.paymentService.automatic-transition-from-open-to-half-open-enabled=true
+```
+
+### Circuit Breaker states
 
 ```text
              ┌──────────┐
              │  CLOSED  │
              └────┬─────┘
                   │
-             failures
+               failures
                   │
                   ▼
              ┌──────────┐
              │   OPEN   │
              └────┬─────┘
                   │
-             wait duration
+             wait 10 seconds
                   │
                   ▼
             ┌───────────┐
@@ -224,82 +344,167 @@ The Circuit Breaker has three main states:
           CLOSED      OPEN
 ```
 
-### Current configuration
+## 🔗 Retry + Circuit Breaker Design
 
-```properties
-resilience4j.circuitbreaker.instances.paymentService.sliding-window-type=COUNT_BASED
-resilience4j.circuitbreaker.instances.paymentService.sliding-window-size=5
-resilience4j.circuitbreaker.instances.paymentService.failure-rate-threshold=50
-resilience4j.circuitbreaker.instances.paymentService.minimum-number-of-calls=5
-resilience4j.circuitbreaker.instances.paymentService.wait-duration-in-open-state=10s
-resilience4j.circuitbreaker.instances.paymentService.permitted-number-of-calls-in-half-open-state=2
-resilience4j.circuitbreaker.instances.paymentService.automatic-transition-from-open-to-half-open-enabled=true
-```
-
-### Circuit Breaker behavior
-
-If Payment Service continuously fails:
+The current design separates resilience from application error handling.
 
 ```text
-5 failed calls
-      ↓
-Failure rate >= 50%
-      ↓
-CLOSED → OPEN
-      ↓
-Stop calling Payment Service
-      ↓
-Execute fallback
-      ↓
-Wait 10 seconds
-      ↓
-OPEN → HALF_OPEN
-      ↓
-Test Payment Service
-      ↓
- ┌────┴────┐
- ▼         ▼
-Success   Failure
- ▼         ▼
-CLOSED    OPEN
+Order Controller
+       |
+       v
+Order Service
+       |
+       v
+Payment Gateway Service
+       |
+       +---- Retry
+       |
+       +---- Circuit Breaker
+       |
+       v
+OpenFeign
+       |
+       v
+Payment Service
+       |
+       | failure
+       v
+Exception propagates
+       |
+       v
+Custom application exception
+       |
+       v
+@RestControllerAdvice
+       |
+       v
+HTTP 503 JSON response
 ```
 
----
+We intentionally avoid putting the same fallback method on both Retry and Circuit Breaker.
 
-# 📊 Actuator
+The goal is:
 
-Actuator is used to monitor the microservices.
+```text
+Attempt 1 → failure
+Attempt 2 → failure
+Attempt 3 → failure
+        ↓
+one final application-level failure
+        ↓
+custom exception
+        ↓
+global exception handler
+        ↓
+HTTP 503
+```
 
-### Health
+## ⚠️ Issues Encountered and Solutions
+
+### 1. Feign 404
+
+**Error**
+
+```text
+FeignException$NotFound: [404]
+```
+
+**Cause:** The Feign client initially called `POST /` while Payment Service expected `POST /payments`.
+
+**Solution:** Make both paths match:
+
+```java
+// Payment Service
+@PostMapping("/payments")
+
+// Feign Client
+@PostMapping("/payments")
+```
+
+### 2. Connection Refused
+
+**Error**
+
+```text
+java.net.ConnectException: Connection refused
+```
+
+**Cause:** Payment Service was not reachable.
+
+**Solution:**
+
+1. Verify Payment Service is running.
+2. Verify it is registered with Eureka.
+3. Verify Eureka contains `PAYMENT-SERVICE`.
+4. Verify the correct port.
+
+### 3. Load Balancer Does Not Contain an Instance
+
+**Error**
+
+```text
+Load balancer does not contain an instance
+for the service payment-service
+```
+
+**Cause:** Order Service attempted to call Payment Service before Eureka had registered an instance.
+
+**Solution:** Start services in this order:
+
+```text
+Eureka
+   ↓
+Payment Service
+   ↓
+Order Service
+```
+
+Wait until `PAYMENT-SERVICE UP` appears in Eureka.
+
+### 4. Circuit Breaker Did Not Retry
+
+**Problem:** Retry appeared to execute only once.
+
+**Cause:** A Circuit Breaker fallback converted the exception into a normal return value, so Retry saw a successful result.
+
+**Solution:** Do not use the same fallback on both Retry and Circuit Breaker. Let exceptions propagate through the resilience layer and handle the final application failure centrally.
+
+### 5. Fallback Executed Multiple Times
+
+**Problem:** The fallback was executed for individual retry failures.
+
+**Solution:** Move Resilience4j annotations to a separate `PaymentGatewayService` and remove `fallbackMethod` from Retry and Circuit Breaker. Convert the final failure into a custom application exception and handle it using `@RestControllerAdvice`.
+
+## 📊 Spring Boot Actuator
+
+Health:
 
 ```text
 http://localhost:8082/actuator/health
 ```
 
-### Info
+Info:
 
 ```text
 http://localhost:8082/actuator/info
 ```
 
-### Metrics
+Metrics:
 
 ```text
 http://localhost:8082/actuator/metrics
 ```
 
-Current configuration:
+Configuration:
 
 ```properties
 management.endpoints.web.exposure.include=health,info,metrics
 management.info.env.enabled=true
 ```
 
----
+## ⚙️ Environment Configuration
 
-# ⚙️ Configuration
-
-Environment-specific or sensitive configuration should not be committed.
+Sensitive configuration should not be committed.
 
 Use:
 
@@ -307,7 +512,7 @@ Use:
 .env
 ```
 
-for local secrets and:
+for local secrets and commit:
 
 ```text
 .env.example
@@ -325,11 +530,9 @@ JWT_SECRET=change_me
 
 Never commit the real `.env` file.
 
----
+## ▶️ Running the Project
 
-# ▶️ Running the Project
-
-Start the services in the following order:
+Start services in this order.
 
 ### 1. Eureka Server
 
@@ -337,15 +540,13 @@ Start the services in the following order:
 localhost:8761
 ```
 
-Wait until Eureka is available.
-
 ### 2. Payment Service
 
 ```text
 localhost:8081
 ```
 
-Verify that it appears in Eureka as:
+Verify:
 
 ```text
 PAYMENT-SERVICE    UP
@@ -364,9 +565,7 @@ ORDER-SERVICE      UP
 PAYMENT-SERVICE    UP
 ```
 
----
-
-# 🧪 Testing
+## 🧪 Testing
 
 Create an order:
 
@@ -374,39 +573,32 @@ Create an order:
 POST http://localhost:8082/orders
 ```
 
-Expected response when Payment Service is healthy:
+When Payment Service succeeds:
 
 ```text
 Order created. Payment Successful
 ```
 
-### Testing Circuit Breaker
+When Payment Service fails repeatedly, observe Retry, Jitter, Exponential Backoff and Circuit Breaker behavior in the logs and Actuator metrics.
 
-1. Keep Payment Service running.
-2. Make `/payments` fail with HTTP 500.
-3. Call `/orders` repeatedly.
-4. Observe the Circuit Breaker transition.
-5. Restore Payment Service.
-6. Observe recovery from HALF_OPEN to CLOSED.
+## 📚 Project Documentation
 
----
+Detailed notes can be maintained separately:
 
-# 📚 Learning Documentation
+```text
+docs/
+├── LEARNING.md
+├── RESILIENCE-PATTERNS.md
+└── TROUBLESHOOTING.md
+```
 
-Detailed learning notes are maintained separately:
+- `LEARNING.md` — concepts and learning notes
+- `RESILIENCE-PATTERNS.md` — Resilience4j experiments and configurations
+- `TROUBLESHOOTING.md` — issues encountered and solutions
 
-- `docs/ARCHITECTURE.md` — Service architecture and communication
-- `docs/LEARNING.md` — Overall concepts and learning notes
-- `docs/RESILIENCE_PATTERNS.md` — Resilience4j concepts and experiments
-- `docs/TROUBLESHOOTING.md` — Issues encountered and their solutions
+## 🗺️ Roadmap
 
-These documents contain the concepts, experiments, issues, and solutions encountered while building the project.
-
----
-
-# 🗺️ Roadmap
-
-## Phase 1 — Microservices Foundation
+### Phase 1 — Microservices Foundation
 
 - [x] Eureka Server
 - [x] Order Service
@@ -414,39 +606,38 @@ These documents contain the concepts, experiments, issues, and solutions encount
 - [x] Service registration
 - [x] Service discovery
 - [x] OpenFeign communication
+- [x] Client-side load balancing
 
-## Phase 2 — Observability
+### Phase 2 — Observability
 
 - [x] Spring Boot Actuator
 - [x] Health endpoint
 - [x] Info endpoint
 - [x] Metrics endpoint
 
-## Phase 3 — Resilience4j
+### Phase 3 — Resilience4j
 
 - [x] Circuit Breaker
-- [x] Fallback
 - [x] CLOSED state
 - [x] OPEN state
 - [x] HALF_OPEN state
-- [ ] Retry
+- [x] Retry
+- [x] Randomized wait / Jitter
+- [x] Exponential Backoff
+- [x] Custom exception handling
+- [x] Global exception handling
+
+### Phase 4 — Advanced Resilience
+
 - [ ] Rate Limiter
 - [ ] Bulkhead
 - [ ] Time Limiter
-
-## Phase 4 — Advanced Resilience
-
-- [ ] Combining Circuit Breaker + Retry
-- [ ] Bulkhead with concurrent requests
-- [ ] Rate limiting
-- [ ] Timeout handling
+- [ ] Combining all resilience patterns
 - [ ] Resilience4j metrics
-- [ ] Failure simulation
+- [ ] Improved failure simulation
 - [ ] Monitoring dashboard
 
----
-
-# 🎯 Learning Goals
+## 🎯 Learning Goals
 
 This project is intended to develop a practical understanding of:
 
@@ -457,17 +648,18 @@ This project is intended to develop a practical understanding of:
 - Failure handling
 - Circuit Breaker
 - Retry
+- Exponential Backoff
+- Jitter
 - Rate Limiting
 - Bulkhead isolation
 - Timeouts
 - Fallback mechanisms
+- Global exception handling
 - Monitoring
 - Distributed-system failure scenarios
 
-The focus is on understanding the behavior of each resilience pattern rather than simply adding annotations to the application.
+The focus is on understanding the behavior and trade-offs of each resilience pattern rather than simply adding annotations.
 
----
-
-# 📄 License
+## 📄 License
 
 This project is intended for learning and demonstration purposes.
