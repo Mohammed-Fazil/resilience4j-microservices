@@ -1,0 +1,26 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Eclipse
+.metadata/
+.settings/
+.classpath
+.project
+.factorypath
+
+# IntelliJ
+.idea/
+*.iml
+
+# Maven
+target/
+*.class
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
