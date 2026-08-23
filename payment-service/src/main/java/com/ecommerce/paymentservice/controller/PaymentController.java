@@ -22,9 +22,15 @@ public class PaymentController {
 
 		System.out.println("Payment attempt: " + attempt + " " + LocalDateTime.now());
 
-		if (attempt % 3 == 0) {
-			throw new PaymentFailedException("Temporary payment failure");
-		}
+//		if (attempt % 3 == 0) {
+//			throw new PaymentFailedException("Temporary payment failure");
+//		}
+//		try {
+//			Thread.sleep(10000);
+//		} catch (InterruptedException e) {
+//			// TODO Auto-generated catch block
+//			Thread.currentThread().interrupt();
+//		}
 
 		return ResponseEntity.ok("Payment Successful");
 	}
