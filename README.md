@@ -540,41 +540,6 @@ resilience4j.thread-pool-bulkhead.instances.paymentService.queue-capacity=2
 resilience4j.thread-pool-bulkhead.instances.paymentService.keep-alive-duration=20s
 ```
 
----
-
-# Git Workflow
-
-After updating this README:
-
-```bash
-git status
-git add README.md
-git commit -m "docs: update resilience4j learning notes"
-git push
-```
-
-If application code and configuration were also changed:
-
-```bash
-git status
-git add .
-git commit -m "feat: update resilience patterns"
-git push
-```
-
-Verify:
-
-```bash
-git status
-```
-
-Expected:
-
-```text
-nothing to commit, working tree clean
-```
-
----
 
 # Learning Progress
 
