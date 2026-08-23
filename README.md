@@ -581,21 +581,6 @@ Order created. Payment Successful
 
 When Payment Service fails repeatedly, observe Retry, Jitter, Exponential Backoff and Circuit Breaker behavior in the logs and Actuator metrics.
 
-## 📚 Project Documentation
-
-Detailed notes can be maintained separately:
-
-```text
-docs/
-├── LEARNING.md
-├── RESILIENCE-PATTERNS.md
-└── TROUBLESHOOTING.md
-```
-
-- `LEARNING.md` — concepts and learning notes
-- `RESILIENCE-PATTERNS.md` — Resilience4j experiments and configurations
-- `TROUBLESHOOTING.md` — issues encountered and solutions
-
 ## 🗺️ Roadmap
 
 ### Phase 1 — Microservices Foundation
