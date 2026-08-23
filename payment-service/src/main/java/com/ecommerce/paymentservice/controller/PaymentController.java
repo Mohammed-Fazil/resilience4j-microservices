@@ -22,7 +22,7 @@ public class PaymentController {
 
 		System.out.println("Payment attempt: " + attempt + " " + LocalDateTime.now());
 
-		if (attempt % 2 == 0) {
+		if (attempt % 3 == 0) {
 			throw new PaymentFailedException("Temporary payment failure");
 		}
 
