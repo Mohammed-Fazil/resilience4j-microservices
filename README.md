@@ -20,8 +20,8 @@ A hands-on Spring Boot microservices project demonstrating fault-tolerance and r
                     │
                     │
              ┌──────▼────────────────────────────────────┐
-             │               Resilience4j                 │
-             │                                            │
+             │               Resilience4j                │
+             │                                           │
              │   ┌─────────┐      ┌──────────────────┐   │
              │   │  Retry  │─────►│ Circuit Breaker  │   │
              │   └─────────┘      └────────┬─────────┘   │
@@ -29,12 +29,12 @@ A hands-on Spring Boot microservices project demonstrating fault-tolerance and r
              │   ┌────────────┐            ▼             │
              │   │RateLimiter │────────► Bulkhead        │
              │   └────────────┘         (Thread Pool)    │
-             │                              │             │
-             │                              ▼             │
-             │                        ┌────────────┐      │
-             │                        │ TimeLimiter│      │
-             │                        └─────┬──────┘      │
-             └──────────────────────────────┼─────────────┘
+             │                              │            │
+             │                              ▼            │
+             │                        ┌────────────┐     │
+             │                        │ TimeLimiter│     │
+             │                        └─────┬──────┘     │
+             └──────────────────────────────┼────────────┘
                                             │
                                             ▼
                                      Payment Service
