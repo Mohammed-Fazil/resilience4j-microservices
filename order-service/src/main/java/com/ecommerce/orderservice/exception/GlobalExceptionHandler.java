@@ -18,12 +18,22 @@ public class GlobalExceptionHandler {
 
 		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
 	}
+
 	@ExceptionHandler(TooManyRequestsException.class)
 	public ResponseEntity<ErrorResponse> handleRateLimiter(TooManyRequestsException exception) {
 
-		ErrorResponse error = new ErrorResponse(LocalDateTime.now(), HttpStatus.SERVICE_UNAVAILABLE.value(),
+		ErrorResponse error = new ErrorResponse(LocalDateTime.now(), HttpStatus.TOO_MANY_REQUESTS.value(),
 				"PAYMENT_SERVICE_UNAVAILABLE", exception.getMessage());
 
 		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+	}
+
+	@ExceptionHandler(PaymentTimeoutException.class)
+	public ResponseEntity<ErrorResponse> handlePaymentTimeout(PaymentTimeoutException exception) {
+
+		ErrorResponse error = new ErrorResponse(LocalDateTime.now(), HttpStatus.GATEWAY_TIMEOUT.value(),
+				"PAYMENT_SERVICE_TIMEOUT", exception.getMessage());
+
+		return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(error);
 	}
 }

@@ -12,6 +12,7 @@ import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 
 @Service
 public class PaymentGatewayService {
@@ -23,11 +24,12 @@ public class PaymentGatewayService {
 	public PaymentGatewayService(PaymentClient paymentClient) {
 		this.paymentClient = paymentClient;
 	}
-
+	
 	@Bulkhead(name = "paymentService", type = Bulkhead.Type.THREADPOOL)
 	@RateLimiter(name = "paymentService")
 	@Retry(name = "paymentService")
 	@CircuitBreaker(name = "paymentService")
+	@TimeLimiter(name="paymentService")
 	public CompletableFuture<String> makePayment() {
 		System.out.println("Calling Payment form Payment Gateway : " + counter.getAndIncrement() + " "
 				+ LocalDateTime.now() + "  " + Thread.currentThread().getName());

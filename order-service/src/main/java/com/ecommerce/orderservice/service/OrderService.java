@@ -1,11 +1,12 @@
 package com.ecommerce.orderservice.service;
 
-import java.time.LocalDateTime;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 import org.springframework.stereotype.Service;
 
 import com.ecommerce.orderservice.exception.PaymentServiceUnavailableException;
+import com.ecommerce.orderservice.exception.PaymentTimeoutException;
 import com.ecommerce.orderservice.exception.TooManyRequestsException;
 
 import io.github.resilience4j.bulkhead.BulkheadFullException;
@@ -29,7 +30,7 @@ public class OrderService {
 		try {
 
 			String paymentResponse = paymentGatewayService.makePayment().get();
-			
+
 //			System.out.println("Got Responce "+paymentResponse);
 
 			return "Order created. " + paymentResponse;
@@ -78,10 +79,14 @@ public class OrderService {
 				throw paymentException;
 			}
 
+			if (cause instanceof TimeoutException) {
+				throw new PaymentTimeoutException("Payment service did not respond within the expected time", cause);
+			}
 			/*
 			 * 5. Unknown failure
 			 */
 			throw new PaymentServiceUnavailableException("Payment service failed unexpectedly.", cause);
+
 		}
 
 		/*

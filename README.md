@@ -231,6 +231,14 @@ resilience4j.thread-pool-bulkhead.instances.paymentService.max-thread-pool-size=
 resilience4j.thread-pool-bulkhead.instances.paymentService.core-thread-pool-size=2
 resilience4j.thread-pool-bulkhead.instances.paymentService.queue-capacity=2
 resilience4j.thread-pool-bulkhead.instances.paymentService.keep-alive-duration=20s
+
+
+# ===============================
+# TimeLimiter
+# ===============================
+
+resilience4j.timelimiter.instances.paymentService.timeout-duration=3s
+resilience4j.timelimiter.instances.paymentService.cancel-running-future=true
 ```
 
 The project tested:
@@ -271,9 +279,79 @@ It is **not** a request timeout.
 
 ---
 
-# Combining All Four Patterns
 
-All four patterns were tested together.
+# 5. TimeLimiter
+
+TimeLimiter limits how long an asynchronous operation is allowed to run.
+
+Current configuration:
+
+```properties
+resilience4j.timelimiter.instances.paymentService.timeout-duration=3s
+resilience4j.timelimiter.instances.paymentService.cancel-running-future=true
+```
+
+Meaning:
+
+```text
+Payment operation
+      |
+      | maximum 3 seconds
+      v
+TimeLimiter
+      |
+      +---- completed → return response
+      |
+      +---- timeout → TimeoutException
+```
+
+The Payment Service was deliberately slowed down during testing to verify timeout behavior.
+
+The protected method returns:
+
+```java
+CompletableFuture<String>
+```
+
+The timeout is converted into an application-specific `PaymentTimeoutException` and handled through the global exception handler.
+
+The API returns:
+
+```text
+HTTP 504 Gateway Timeout
+```
+
+Example:
+
+```json
+{
+    "status": 504,
+    "error": "PAYMENT_SERVICE_TIMEOUT",
+    "message": "Payment service did not respond within the expected time."
+}
+```
+
+### TimeLimiter + Retry
+
+The combination was tested successfully.
+
+With a 3-second TimeLimiter and 3 retry attempts:
+
+```text
+Attempt 1 → timeout → Retry
+Attempt 2 → timeout → Retry
+Attempt 3 → timeout → final failure
+```
+
+The final timeout is translated into `PaymentTimeoutException`.
+
+### Important behavior
+
+`cancel-running-future=true` does not guarantee that a blocking downstream HTTP operation is physically interrupted. The TimeLimiter stops waiting for the result when the timeout is reached.
+
+# Combining All Five Patterns
+
+All five resilience patterns were tested together.
 
 The service uses:
 
@@ -335,6 +413,10 @@ RequestNotPermitted
 Bulkhead
     ↓
 BulkheadFullException
+
+TimeLimiter
+    ↓
+TimeoutException
 ```
 
 These are converted into application-level exceptions such as:
@@ -394,6 +476,10 @@ if (cause instanceof CallNotPermittedException) {
 
 if (cause instanceof RequestNotPermitted) {
     // RateLimiter rejected the request
+}
+
+if (cause instanceof TimeoutException) {
+    // TimeLimiter timeout
 }
 ```
 
@@ -538,10 +624,20 @@ resilience4j.thread-pool-bulkhead.instances.paymentService.max-thread-pool-size=
 resilience4j.thread-pool-bulkhead.instances.paymentService.core-thread-pool-size=2
 resilience4j.thread-pool-bulkhead.instances.paymentService.queue-capacity=2
 resilience4j.thread-pool-bulkhead.instances.paymentService.keep-alive-duration=20s
+
+
+# ===============================
+# TimeLimiter
+# ===============================
+
+resilience4j.timelimiter.instances.paymentService.timeout-duration=3s
+resilience4j.timelimiter.instances.paymentService.cancel-running-future=true
 ```
 
 
-# Learning Progress
+# Completed Resilience4j Implementation
+
+The project has implemented and tested all five resilience patterns:
 
 - [x] Eureka Service Discovery
 - [x] OpenFeign communication
@@ -555,14 +651,48 @@ resilience4j.thread-pool-bulkhead.instances.paymentService.keep-alive-duration=2
 - [x] Semaphore Bulkhead
 - [x] ThreadPool Bulkhead
 - [x] Keep-alive duration
+- [x] TimeLimiter
+- [x] Retry + TimeLimiter
+- [x] Circuit Breaker + TimeLimiter
+- [x] RateLimiter + TimeLimiter
+- [x] ThreadPool Bulkhead + TimeLimiter
+- [x] Combined Retry + Circuit Breaker + RateLimiter + Bulkhead + TimeLimiter
 - [x] Custom application exceptions
 - [x] Global exception handling
 - [x] CompletableFuture exception handling
-- [x] Combining resilience patterns
 
-## Next
+## Complete Resilience Flow
 
-- [ ] TimeLimiter
-- [ ] Combine TimeLimiter with the other resilience patterns
-- [ ] Metrics and monitoring
-- [ ] Production-oriented resilience configuration
+```text
+                         Order Request
+                              |
+                              v
+                            Retry
+                              |
+                              v
+                       Circuit Breaker
+                              |
+                              v
+                         RateLimiter
+                              |
+                              v
+                   ThreadPool Bulkhead
+                              |
+                              v
+                         TimeLimiter
+                              |
+                              v
+                       Payment Service
+```
+
+Each pattern has a specific responsibility:
+
+| Pattern | Responsibility |
+|---|---|
+| Retry | Retries temporary failures |
+| Circuit Breaker | Stops calls to an unhealthy service |
+| RateLimiter | Controls request rate |
+| Bulkhead | Limits concurrent work and isolates resources |
+| TimeLimiter | Limits how long an operation can take |
+
+The combined setup was tested successfully with slow and failing Payment Service scenarios.

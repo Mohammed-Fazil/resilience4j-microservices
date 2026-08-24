@@ -25,12 +25,12 @@ public class PaymentController {
 //		if (attempt % 3 == 0) {
 //			throw new PaymentFailedException("Temporary payment failure");
 //		}
-//		try {
-//			Thread.sleep(10000);
-//		} catch (InterruptedException e) {
-//			// TODO Auto-generated catch block
-//			Thread.currentThread().interrupt();
-//		}
+		try {
+			Thread.sleep(4000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			Thread.currentThread().interrupt();
+		}
 
 		return ResponseEntity.ok("Payment Successful");
 	}
